@@ -12,6 +12,7 @@ import {
   LUNGE_DIST,
   LUNGE_S,
   LUNGE_SPEED,
+  MEMORY_EXPIRE_S,
   PATROL_SPEED,
   STAGGER_S,
   STARE_DOT,
@@ -32,11 +33,11 @@ export type MonsterRule =
 export interface MonsterState {
   x: number;
   z: number;
-  lungeS: number; // >= 0 while lunging
-  staggerS: number; // > 0 while recovering from a missed lunge
+  lungeS: number;
+  staggerS: number;
   wanderTarget: number;
-  /** Where it last heard something — it investigates the POINT, not you. */
   heardPoint: { x: number; z: number } | null;
+  heardAgeS: number;
   pingS: number;
 }
 
@@ -56,7 +57,15 @@ export interface Sensed {
 }
 
 export function makeMonster(spawn: { x: number; z: number }): MonsterState {
-  return { ...spawn, lungeS: -1, staggerS: 0, wanderTarget: -1, heardPoint: null, pingS: 0 };
+  return {
+    ...spawn,
+    lungeS: -1,
+    staggerS: 0,
+    wanderTarget: -1,
+    heardPoint: null,
+    heardAgeS: 0,
+    pingS: 0,
+  };
 }
 
 /** Is any player's beam on it? (light-averse rule) */
@@ -159,7 +168,16 @@ export function stepMonster(
     return { caught: false };
   }
   // remember what it heard — this is what makes "it almost heard me" possible
-  if (s.loudest) m.heardPoint = { x: s.loudest.x, z: s.loudest.z };
+  if (s.loudest) {
+    m.heardPoint = { x: s.loudest.x, z: s.loudest.z };
+    m.heardAgeS = 0;
+  } else if (m.heardPoint) {
+    m.heardAgeS += dtS;
+    if (m.heardAgeS >= MEMORY_EXPIRE_S) {
+      m.heardPoint = null;
+      m.heardAgeS = 0;
+    }
+  }
 
   if (m.staggerS > 0) {
     m.staggerS -= dtS; // recovering from a miss: the escape window
